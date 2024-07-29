@@ -138,13 +138,81 @@ async def refresh_token(request: Request, response: Response):
         )
     return token_response_json
 
+# @app.get("/protected")
+# async def read_protected(request: Request):
+#     token = request.cookies.get("access_token")
+#     if not token:
+#         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+#     payload = verify_token(token)
+#     return {"message": "You are authorized", "payload": payload}
+
+
+def refresh_access_token(refresh_token: str):
+    token_response = requests.post(
+        f"https://{AUTH0_DOMAIN}/oauth/token",
+        json={
+            "grant_type": "refresh_token",
+            "client_id": "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre",
+            "client_secret": "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT",
+            "refresh_token": refresh_token,
+        }
+    )
+    token_response_json = token_response.json()
+    print("token_response_json", token_response_json)
+    if "access_token" in token_response_json:
+        return token_response_json["access_token"], token_response_json.get("refresh_token")
+    else:
+        raise HTTPException(status_code=401, detail="Unable to refresh token")
+
+
 @app.get("/protected")
-async def read_protected(request: Request):
+async def read_protected(request: Request, response: Response):
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    payload = verify_token(token)
+    try:
+        payload = verify_token(token)
+        print("payload", payload)
+    except HTTPException:
+        # Token is expired or invalid, try to refresh it
+        refresh_token = request.cookies.get("refresh_token")
+        print("refresh_token", refresh_token)
+        if not refresh_token:
+            response.delete_cookie("access_token")
+            response.delete_cookie("refresh_token")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired, please login again")
+        try:
+            new_access_token, new_refresh_token = refresh_access_token(refresh_token)
+            print("after refresh")
+            response.set_cookie(
+                key="access_token",
+                value=new_access_token,
+                httponly=True,
+                secure=True,
+                samesite="Strict",
+            )
+            if new_refresh_token:
+                response.set_cookie(
+                    key="refresh_token",
+                    value=new_refresh_token,
+                    httponly=True,
+                    secure=True,
+                    samesite="Strict",
+                )
+            
+            print("new_access_token", new_access_token)
+            print("new_refresh_token", new_refresh_token)
+
+            payload = verify_token(new_access_token)
+        except HTTPException:
+            print("Unable to refresh token")
+            response.delete_cookie("access_token")
+            response.delete_cookie("refresh_token")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired, please login again")
     return {"message": "You are authorized", "payload": payload}
+
+
+
 
 @app.get("/check-session")
 async def check_session(request: Request):

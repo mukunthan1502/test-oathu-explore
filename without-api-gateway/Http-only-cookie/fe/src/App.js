@@ -73,16 +73,39 @@ const Home = () => {
   };
 
   const apiProtected = async () => {
-    try {
-      const response = await fetch("http://localhost:8000/protected", {
-        credentials: "include"
-      });
+    // try {
+    //   const response = await fetch("http://localhost:8000/protected", {
+    //     credentials: "include"
+    //   });
+    //   const json = await response.json();
+    //   setApiResponse(json);
+    //   console.log("response-get::", json);
+    // } catch (error) {
+    //   console.log(error);
+    // }
+
+  try {
+    let response = await fetch("http://localhost:8000/protected", {
+      credentials: "include",
+    });
+    if (response.status === 401) {
+      // Redirect to login page if the session has expired
+      // window.location.href = "/login";
+      const verifier = generateCodeVerifier();
+      sessionStorage.setItem("code_verifier", verifier);
+      const challenge = await generateCodeChallenge(verifier);
+  
+      const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?response_type=code&client_id=xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre&state=12345&redirect_uri=http://localhost:3000/redirect&code_challenge=${challenge}&code_challenge_method=S256&scope=offline_access&prompt=login`;
+      window.location.href = authUrl;
+
+    } else {
       const json = await response.json();
       setApiResponse(json);
-      console.log("response-get::", json);
-    } catch (error) {
-      console.log(error);
     }
+  } catch (error) {
+    console.error("Error fetching protected data:", error);
+  }
+
   };
 
   const refreshToken = async () => {
