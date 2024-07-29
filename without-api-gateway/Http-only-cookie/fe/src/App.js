@@ -26,6 +26,27 @@ function generateCodeVerifier() {
   return Array.from(array, (dec) => ("0" + dec.toString(16)).substr(-2)).join("");
 }
 
+const navigateToAuthLogin = async () => {
+  const verifier = generateCodeVerifier();
+  sessionStorage.setItem("code_verifier", verifier);
+  const challenge = await generateCodeChallenge(verifier);
+
+  const authParams = new URLSearchParams({
+    response_type: 'code',
+    client_id: 'xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre',
+    state: '12345',
+    redirect_uri: 'http://localhost:3000/redirect',
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    // scope: 'offline_access',
+    scope: 'openid profile email offline_access',
+    prompt: 'login',
+  });
+  
+  const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?${authParams.toString()}`;
+  window.location.href = authUrl;
+};
+
 const Home = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [apiResponse, setApiResponse] = useState("");
@@ -51,7 +72,7 @@ const Home = () => {
   }, []);
 
   const onClick = async () => {
-    if (false) {
+    if (loggedIn) {
       try {
         await fetch("http://localhost:8000/logout", {
           method: "POST",
@@ -64,39 +85,17 @@ const Home = () => {
       return;
     }
 
-    const verifier = generateCodeVerifier();
-    sessionStorage.setItem("code_verifier", verifier);
-    const challenge = await generateCodeChallenge(verifier);
+    navigateToAuthLogin();
 
-    const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?response_type=code&client_id=xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre&state=12345&redirect_uri=http://localhost:3000/redirect&code_challenge=${challenge}&code_challenge_method=S256&scope=offline_access&prompt=login`;
-    window.location.href = authUrl;
   };
 
   const apiProtected = async () => {
-    // try {
-    //   const response = await fetch("http://localhost:8000/protected", {
-    //     credentials: "include"
-    //   });
-    //   const json = await response.json();
-    //   setApiResponse(json);
-    //   console.log("response-get::", json);
-    // } catch (error) {
-    //   console.log(error);
-    // }
-
   try {
     let response = await fetch("http://localhost:8000/protected", {
       credentials: "include",
     });
     if (response.status === 401) {
-      // Redirect to login page if the session has expired
-      // window.location.href = "/login";
-      const verifier = generateCodeVerifier();
-      sessionStorage.setItem("code_verifier", verifier);
-      const challenge = await generateCodeChallenge(verifier);
-  
-      const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?response_type=code&client_id=xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre&state=12345&redirect_uri=http://localhost:3000/redirect&code_challenge=${challenge}&code_challenge_method=S256&scope=offline_access&prompt=login`;
-      window.location.href = authUrl;
+      navigateToAuthLogin();
 
     } else {
       const json = await response.json();
@@ -116,12 +115,6 @@ const Home = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          grant_type: "refresh_token",
-          client_id: "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre",
-          client_secret: "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT",
-          // refresh_token: sessionStorage.getItem("refresh_token"),
-        }),
       });
       const data = await response.json();
       if (data.access_token) {
@@ -168,10 +161,7 @@ const Redirect = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          grant_type: "authorization_code",
           redirect_uri: "http://localhost:3000/redirect",
-          client_id: "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre",
-          client_secret: "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT",
           code_verifier: codeVerifier,
           code: code,
         }),

@@ -5,6 +5,7 @@ from jose.utils import base64url_decode
 import requests
 from fastapi.middleware.cors import CORSMiddleware
 
+
 app = FastAPI()
 
 app.add_middleware(
@@ -19,7 +20,9 @@ app.add_middleware(
 AUTH0_DOMAIN = "dev-ptqk6ibc8njgm5ty.us.auth0.com"
 JWKS_URL = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
 ALGORITHMS = ["RS256"]
-API_AUDIENCE = "https://api.example.com"  # Your API Audience
+API_AUDIENCE = "https://api.example.com"
+CLIENT_ID = "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre"
+CLIENT_SECRET = "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT"
 
 # Fetch the JWKS
 response = requests.get(JWKS_URL)
@@ -65,9 +68,9 @@ async def token_endpoint(request: Request, response: Response):
     token_response = requests.post(
         f"https://{AUTH0_DOMAIN}/oauth/token",
         json={
-            "grant_type": data["grant_type"],
-            "client_id": data["client_id"],
-            "client_secret": data["client_secret"],
+            "grant_type": "authorization_code",
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
             "code": data.get("code"),
             "redirect_uri": data.get("redirect_uri"),
             "code_verifier": data.get("code_verifier"),
@@ -76,11 +79,6 @@ async def token_endpoint(request: Request, response: Response):
     token_response_json = token_response.json()
 
     print("token_response_json", token_response_json)
-    # print("token_response['access_token']", token_response_json['access_token'])
-    # print("token_response['refresh_token']", token_response_json['refresh_token'])
-    # print("token_response['expires_in']", token_response_json['expires_in'])
-    # print("token_response['token_type']", token_response_json['token_type'])
-
     
     if "access_token" in token_response_json:
         response.set_cookie(
@@ -114,8 +112,8 @@ async def refresh_token(request: Request, response: Response):
         f"https://{AUTH0_DOMAIN}/oauth/token",
         json={
             "grant_type": "refresh_token",
-            "client_id": data["client_id"],
-            "client_secret": data["client_secret"],
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
             "refresh_token": refresh_token,
         }
     )
@@ -152,8 +150,8 @@ def refresh_access_token(refresh_token: str):
         f"https://{AUTH0_DOMAIN}/oauth/token",
         json={
             "grant_type": "refresh_token",
-            "client_id": "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre",
-            "client_secret": "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT",
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
             "refresh_token": refresh_token,
         }
     )
