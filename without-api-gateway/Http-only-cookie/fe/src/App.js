@@ -49,8 +49,9 @@ const Home = () => {
 
     checkSession();
   }, []);
+
   const onClick = async () => {
-    if (loggedIn) {
+    if (false) {
       try {
         await fetch("http://localhost:8000/logout", {
           method: "POST",
@@ -67,7 +68,7 @@ const Home = () => {
     sessionStorage.setItem("code_verifier", verifier);
     const challenge = await generateCodeChallenge(verifier);
 
-    const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?response_type=code&client_id=xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre&state=12345&redirect_uri=http://localhost:3000/redirect&code_challenge=${challenge}&code_challenge_method=S256&prompt=login`;
+    const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?response_type=code&client_id=xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre&state=12345&redirect_uri=http://localhost:3000/redirect&code_challenge=${challenge}&code_challenge_method=S256&scope=offline_access&prompt=login`;
     window.location.href = authUrl;
   };
 
@@ -79,11 +80,36 @@ const Home = () => {
       const json = await response.json();
       setApiResponse(json);
       console.log("response-get::", json);
-    }
-    catch (error) {
+    } catch (error) {
       console.log(error);
     }
+  };
 
+  const refreshToken = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/refresh-token", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          grant_type: "refresh_token",
+          client_id: "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre",
+          client_secret: "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT",
+          // refresh_token: sessionStorage.getItem("refresh_token"),
+        }),
+      });
+      const data = await response.json();
+      if (data.access_token) {
+        setLoggedIn(true);
+      } else {
+        setLoggedIn(false);
+      }
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      setLoggedIn(false);
+    }
   };
 
   return (
@@ -91,7 +117,8 @@ const Home = () => {
       <div>
         <h1>Site.</h1>
         <button onClick={onClick}>{loggedIn ? "Sign Out" : "Sign In"}</button>
-        <button onClick={apiProtected}>Protect GET URL call</button>
+        <button onClick={apiProtected}>Protected GET URL call</button>
+        <button onClick={refreshToken}>Refresh Token</button>
         <button onClick={() => setApiResponse("")}>Clear</button>
       </div>
       <div>{JSON.stringify(apiResponse)}</div>
@@ -108,7 +135,7 @@ const Redirect = () => {
     const query = new URLSearchParams(location.search);
     const code = query.get("code");
     const codeVerifier = sessionStorage.getItem("code_verifier");
-
+    
     if (code && codeVerifier && !isRequestSent.current) {
       isRequestSent.current = true;
 
@@ -129,10 +156,8 @@ const Redirect = () => {
       })
         .then(response => response.json())
         .then(data => {
-          // if (!data.error) {
-            sessionStorage.removeItem("code_verifier");
-            navigate("/");
-          // }
+          sessionStorage.removeItem("code_verifier");
+          navigate("/");
         })
         .catch(error => {
           console.error("Error:", error);
