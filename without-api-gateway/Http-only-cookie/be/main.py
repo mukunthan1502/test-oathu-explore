@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -15,7 +14,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # Configuration
 AUTH0_DOMAIN = "dev-ptqk6ibc8njgm5ty.us.auth0.com"
@@ -36,7 +34,6 @@ def get_public_key(kid):
 def add_padding(base64_string):
     """Add padding to a base64 string if necessary."""
     return base64_string + '=' * (4 - len(base64_string) % 4)
-
 
 def verify_token(token: str):
     credentials_exception = HTTPException(
@@ -65,29 +62,27 @@ def verify_token(token: str):
 @app.post("/token")
 async def token_endpoint(request: Request, response: Response):
     data = await request.json()
-    # Exchange authorization code for access token
-    print("data", data)
-    print("*" * 100)
     token_response = requests.post(
         f"https://{AUTH0_DOMAIN}/oauth/token",
         json={
-            "grant_type": "authorization_code",
+            "grant_type": data["grant_type"],
             "client_id": data["client_id"],
             "client_secret": data["client_secret"],
-            "code": data["code"],
-            "redirect_uri": data["redirect_uri"],
-            "code_verifier": data["code_verifier"],
+            "code": data.get("code"),
+            "redirect_uri": data.get("redirect_uri"),
+            "code_verifier": data.get("code_verifier"),
         },
     )
-    print("token_response", token_response)
-    print("*" * 100)
     token_response_json = token_response.json()
 
     print("token_response_json", token_response_json)
-    print("*" * 100)
+    # print("token_response['access_token']", token_response_json['access_token'])
+    # print("token_response['refresh_token']", token_response_json['refresh_token'])
+    # print("token_response['expires_in']", token_response_json['expires_in'])
+    # print("token_response['token_type']", token_response_json['token_type'])
+
     
     if "access_token" in token_response_json:
-        print("access_token", token_response_json["access_token"])
         response.set_cookie(
             key="access_token",
             value=token_response_json["access_token"],
@@ -95,32 +90,74 @@ async def token_endpoint(request: Request, response: Response):
             secure=True,
             samesite="Strict",
         )
-    print("*return" * 100)
+    if "refresh_token" in token_response_json:
+        response.set_cookie(
+            key="refresh_token",
+            value=token_response_json["refresh_token"],
+            httponly=True,
+            secure=True,
+            samesite="Strict",
+        )
+    return token_response_json
+
+@app.post("/refresh-token")
+async def refresh_token(request: Request, response: Response):
+    print("refresh_token", request.cookies.get("refresh_token"))
+    data = await request.json()
+    # refresh_token = data.get("refresh_token")
+    refresh_token = request.cookies.get("refresh_token")
+
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token not found")
+
+    token_response = requests.post(
+        f"https://{AUTH0_DOMAIN}/oauth/token",
+        json={
+            "grant_type": "refresh_token",
+            "client_id": data["client_id"],
+            "client_secret": data["client_secret"],
+            "refresh_token": refresh_token,
+        }
+    )
+    token_response_json = token_response.json()
+    if "access_token" in token_response_json:
+        response.set_cookie(
+            key="access_token",
+            value=token_response_json["access_token"],
+            httponly=True,
+            secure=True,
+            samesite="Strict",
+        )
+    if "refresh_token" in token_response_json:
+        response.set_cookie(
+            key="refresh_token",
+            value=token_response_json["refresh_token"],
+            httponly=True,
+            secure=True,
+            samesite="Strict",
+        )
     return token_response_json
 
 @app.get("/protected")
 async def read_protected(request: Request):
-    print("request.cookies", request.cookies)
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     payload = verify_token(token)
     return {"message": "You are authorized", "payload": payload}
 
-
 @app.get("/check-session")
 async def check_session(request: Request):
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    # Optionally, you could verify the token here to ensure it's valid
     return {"message": "Session is valid"}
 
 @app.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
-
 
 if __name__ == "__main__":
     import uvicorn
