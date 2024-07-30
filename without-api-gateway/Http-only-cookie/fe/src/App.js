@@ -6,25 +6,43 @@ import {
   useLocation
 } from "react-router-dom";
 
-function base64UrlEncode(str) {
+const base64UrlEncode = (str) => {
   return btoa(String.fromCharCode.apply(null, new Uint8Array(str)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
-async function generateCodeChallenge(verifier) {
+const generateCodeChallenge = async(verifier) => {
   const encoder = new TextEncoder();
   const data = encoder.encode(verifier);
   const digest = await window.crypto.subtle.digest("SHA-256", data);
   return base64UrlEncode(digest);
 }
 
-function generateCodeVerifier() {
+const generateCodeVerifier = () => {
   const array = new Uint32Array(43);
   window.crypto.getRandomValues(array);
   return Array.from(array, (dec) => ("0" + dec.toString(16)).substr(-2)).join("");
 }
+
+const Clock = () => {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      setTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, []);
+
+  return (
+    <div>
+      <h1>{time.toLocaleTimeString()}</h1>
+    </div>
+  );
+};
 
 const navigateToAuthLogin = async () => {
   const verifier = generateCodeVerifier();
@@ -38,7 +56,6 @@ const navigateToAuthLogin = async () => {
     redirect_uri: 'http://localhost:3000/redirect',
     code_challenge: challenge,
     code_challenge_method: 'S256',
-    // scope: 'offline_access',
     scope: 'openid profile email offline_access',
     prompt: 'login',
   });
@@ -54,7 +71,7 @@ const Home = () => {
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const response = await fetch("http://localhost:8000/check-session", {
+        const response = await fetch("http://13.229.230.252:8000/check-session", {
           credentials: "include",
         });
         if (response.ok) {
@@ -74,7 +91,7 @@ const Home = () => {
   const onClick = async () => {
     if (loggedIn) {
       try {
-        await fetch("http://localhost:8000/logout", {
+        await fetch("http://13.229.230.252:8000/logout", {
           method: "POST",
           credentials: "include",
         });
@@ -86,30 +103,27 @@ const Home = () => {
     }
 
     navigateToAuthLogin();
-
   };
 
   const apiProtected = async () => {
-  try {
-    let response = await fetch("http://localhost:8000/protected", {
-      credentials: "include",
-    });
-    if (response.status === 401) {
-      navigateToAuthLogin();
-
-    } else {
-      const json = await response.json();
-      setApiResponse(json);
+    try {
+      let response = await fetch("http://13.229.230.252:8000/protected", {
+        credentials: "include",
+      });
+      if (response.status === 401) {
+        navigateToAuthLogin();
+      } else {
+        const json = await response.json();
+        setApiResponse(json);
+      }
+    } catch (error) {
+      console.error("Error fetching protected data:", error);
     }
-  } catch (error) {
-    console.error("Error fetching protected data:", error);
-  }
-
   };
 
   const refreshToken = async () => {
     try {
-      const response = await fetch("http://localhost:8000/refresh-token", {
+      const response = await fetch("http://13.229.230.252:8000/refresh-token", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -137,6 +151,8 @@ const Home = () => {
         <button onClick={refreshToken}>Refresh Token</button>
         <button onClick={() => setApiResponse("")}>Clear</button>
       </div>
+      <div><Clock /></div>
+      <div>Access Token:</div>
       <div>{JSON.stringify(apiResponse)}</div>
     </>
   );
@@ -155,7 +171,7 @@ const Redirect = () => {
     if (code && codeVerifier && !isRequestSent.current) {
       isRequestSent.current = true;
 
-      fetch("http://localhost:8000/token", {
+      fetch("http://13.229.230.252:8000/token", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

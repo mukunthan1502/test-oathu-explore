@@ -6,25 +6,65 @@ import {
   useLocation
 } from "react-router-dom";
 
-function base64UrlEncode(str) {
+const base64UrlEncode = (str) => {
   return btoa(String.fromCharCode.apply(null, new Uint8Array(str)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
-async function generateCodeChallenge(verifier) {
+ const generateCodeChallenge = async(verifier) => {
   const encoder = new TextEncoder();
   const data = encoder.encode(verifier);
   const digest = await window.crypto.subtle.digest("SHA-256", data);
   return base64UrlEncode(digest);
 }
 
-function generateCodeVerifier() {
+const generateCodeVerifier = () => {
   const array = new Uint32Array(43);
   window.crypto.getRandomValues(array);
   return Array.from(array, (dec) => ("0" + dec.toString(16)).substr(-2)).join("");
 }
+
+const Clock = () => {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      setTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, []);
+
+  return (
+    <div>
+      <h1>{time.toLocaleTimeString()}</h1>
+    </div>
+  );
+};
+
+
+const navigateToAuthLogin = async () => {
+  const verifier = generateCodeVerifier();
+  sessionStorage.setItem("code_verifier", verifier);
+  const challenge = await generateCodeChallenge(verifier);
+
+  const authParams = new URLSearchParams({
+    response_type: 'code',
+    client_id: 'xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre',
+    state: '12345',
+    redirect_uri: 'http://localhost:3000/redirect',
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    // scope: 'offline_access',
+    scope: 'openid profile email offline_access',
+    prompt: 'login',
+  });
+  
+  const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?${authParams.toString()}`;
+  window.location.href = authUrl;
+};
 
 const Home = () => {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -49,6 +89,7 @@ const Home = () => {
 
     checkSession();
   }, []);
+
   const onClick = async () => {
     if (loggedIn) {
       try {
@@ -63,27 +104,47 @@ const Home = () => {
       return;
     }
 
-    const verifier = generateCodeVerifier();
-    sessionStorage.setItem("code_verifier", verifier);
-    const challenge = await generateCodeChallenge(verifier);
+    navigateToAuthLogin();
 
-    const authUrl = `https://dev-ptqk6ibc8njgm5ty.us.auth0.com/authorize?response_type=code&client_id=xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre&state=12345&redirect_uri=http://localhost:3000/redirect&code_challenge=${challenge}&code_challenge_method=S256&prompt=login`;
-    window.location.href = authUrl;
   };
 
   const apiProtected = async () => {
-    try {
-      const response = await fetch("http://localhost:8000/protected", {
-        credentials: "include"
-      });
+  try {
+    let response = await fetch("http://localhost:8000/protected", {
+      credentials: "include",
+    });
+    if (response.status === 401) {
+      navigateToAuthLogin();
+      debugger
+    } else {
       const json = await response.json();
       setApiResponse(json);
-      console.log("response-get::", json);
     }
-    catch (error) {
-      console.log(error);
-    }
+  } catch (error) {
+    console.error("Error fetching protected data:", error);
+  }
 
+  };
+
+  const refreshToken = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/refresh-token", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await response.json();
+      if (data.access_token) {
+        setLoggedIn(true);
+      } else {
+        setLoggedIn(false);
+      }
+    } catch (error) {
+      console.error("Error refreshing token:", error);
+      setLoggedIn(false);
+    }
   };
 
   return (
@@ -91,9 +152,12 @@ const Home = () => {
       <div>
         <h1>Site.</h1>
         <button onClick={onClick}>{loggedIn ? "Sign Out" : "Sign In"}</button>
-        <button onClick={apiProtected}>Protect GET URL call</button>
+        <button onClick={apiProtected}>Protected GET URL call</button>
+        <button onClick={refreshToken}>Refresh Token</button>
         <button onClick={() => setApiResponse("")}>Clear</button>
       </div>
+      <div><Clock /></div>
+      <div>Access Token:</div>
       <div>{JSON.stringify(apiResponse)}</div>
     </>
   );
@@ -108,7 +172,7 @@ const Redirect = () => {
     const query = new URLSearchParams(location.search);
     const code = query.get("code");
     const codeVerifier = sessionStorage.getItem("code_verifier");
-
+    
     if (code && codeVerifier && !isRequestSent.current) {
       isRequestSent.current = true;
 
@@ -118,10 +182,7 @@ const Redirect = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          grant_type: "authorization_code",
           redirect_uri: "http://localhost:3000/redirect",
-          client_id: "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre",
-          client_secret: "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT",
           code_verifier: codeVerifier,
           code: code,
         }),
@@ -129,10 +190,8 @@ const Redirect = () => {
       })
         .then(response => response.json())
         .then(data => {
-          // if (!data.error) {
-            sessionStorage.removeItem("code_verifier");
-            navigate("/");
-          // }
+          sessionStorage.removeItem("code_verifier");
+          navigate("/");
         })
         .catch(error => {
           console.error("Error:", error);
@@ -146,6 +205,9 @@ const Redirect = () => {
     </div>
   );
 };
+
+
+
 
 const App = () => {
   return (

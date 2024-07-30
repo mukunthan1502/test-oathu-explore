@@ -25,7 +25,7 @@ CLIENT_ID = "xmPoVoVk6WrffxGwPhDyOVUB3uhuDqre"
 CLIENT_SECRET = "0F0Kn0j_SrecdoUrzHVFgXKWA-qE4BBOxdvDbTrGGllGmVSNgmKyLGVjI7WfaWzT"
 
 # Fetch the JWKS
-response = requests.get(JWKS_URL)
+response = requests.get(JWKS_URL, verify=False)
 jwks = response.json()
 
 def get_public_key(kid):
@@ -115,7 +115,8 @@ async def refresh_token(request: Request, response: Response):
             "client_id": CLIENT_ID,
             "client_secret": CLIENT_SECRET,
             "refresh_token": refresh_token,
-        }
+        },
+         verify=False
     )
     token_response_json = token_response.json()
     if "access_token" in token_response_json:
@@ -154,6 +155,7 @@ def refresh_access_token(refresh_token: str):
             "client_secret": CLIENT_SECRET,
             "refresh_token": refresh_token,
         }
+        , verify=False
     )
     token_response_json = token_response.json()
     print("token_response_json", token_response_json)
